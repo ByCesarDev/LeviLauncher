@@ -29,10 +29,19 @@ export async function listDirectories(path: string, throwOnError = false): Promi
   }
 }
 
-export async function countDirectories(path: string): Promise<number> {
+export async function countDirectories(path: string | undefined | null, countArchives = false): Promise<number> {
+  const p = String(path || "").trim();
+  if (!p) return 0;
   try {
-    const list = await ListDir(path);
-    return (list || []).filter((e: any) => e.isDir).length;
+    const list = await ListDir(p);
+    return (list || []).filter((e: any) => {
+      if (e.isDir) return true;
+      if (countArchives) {
+        const lower = String(e.name || "").toLowerCase();
+        return lower.endsWith(".mcpack") || lower.endsWith(".zip");
+      }
+      return false;
+    }).length;
   } catch {
     return 0;
   }

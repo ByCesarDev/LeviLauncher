@@ -20,6 +20,7 @@ import * as modsService from "bindings/github.com/liteldev/LeviLauncher/internal
 import * as versionService from "bindings/github.com/liteldev/LeviLauncher/internal/app/versionservice";
 import * as userService from "bindings/github.com/liteldev/LeviLauncher/internal/app/userservice";
 import { getPlayerGamertagMap, listPlayers } from "@/utils/content";
+import { countDirectories } from "@/utils/fs";
 import { ROUTES } from "@/constants/routes";
 import { normalizePackageType } from "@/utils/packageType";
 
@@ -915,11 +916,14 @@ export const useLauncher = (args: any) => {
       let res = 0;
       let bp = 0;
       try {
-        const resEntries = await ListDir(safe.resourcePacks);
-        const resDirs = (resEntries || []).filter((e: any) => e.isDir);
-        res = resDirs.length;
-
-        bp = await countDir(safe.behaviorPacks);
+        const [resNorm, resDev, bpNorm, bpDev] = await Promise.all([
+          countDirectories(safe.resourcePacks, true),
+          countDirectories(safe.developmentResourcePacks || "", true),
+          countDirectories(safe.behaviorPacks, true),
+          countDirectories(safe.developmentBehaviorPacks || "", true),
+        ]);
+        res = resNorm + resDev;
+        bp = bpNorm + bpDev;
       } catch {}
 
       if (roots?.packageType === "uwp") {

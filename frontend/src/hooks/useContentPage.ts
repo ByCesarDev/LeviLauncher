@@ -12,7 +12,7 @@ import {
 import { GetLocalUserGamertag } from "bindings/github.com/liteldev/LeviLauncher/internal/app/userservice";
 import { GetContentRoots } from "bindings/github.com/liteldev/LeviLauncher/internal/app/contentservice";
 import * as types from "bindings/github.com/liteldev/LeviLauncher/internal/types/models";
-import { readCurrentVersionName } from "@/utils/currentVersion";
+import { readCurrentVersionName, saveCurrentVersionName } from "@/utils/currentVersion";
 import { compareVersions } from "@/utils/version";
 import {
   countDirectories,
@@ -109,7 +109,16 @@ export const useContentPage = (t: TFunc) => {
   const refreshAll = async (playerToRefresh?: string) => {
     setLoading(true);
     setError("");
-    const name = readCurrentVersionName();
+    let name = readCurrentVersionName();
+    if (!name && hasBackend) {
+      try {
+        const metas: any = await ListVersionMetas();
+        if (Array.isArray(metas) && metas.length > 0 && metas[0]?.name) {
+          name = metas[0].name;
+          saveCurrentVersionName(name, "contentpage.fallback");
+        }
+      } catch {}
+    }
     setCurrentVersionName(name);
     try {
       if (!hasBackend || !name) {
@@ -139,14 +148,15 @@ export const useContentPage = (t: TFunc) => {
           setPlayers([]);
           setSelectedPlayer("");
           setPlayerGamertagMap({});
-          const [worlds, skins, servers, screenshots] = await Promise.all([
+          const [worlds, skins, devSkins, servers, screenshots] = await Promise.all([
             countDirectories(safe.worlds || ""),
-            countDirectories(safe.skinPacks || ""),
+            countDirectories(safe.skinPacks || "", true),
+            countDirectories(safe.developmentSkinPacks || "", true),
             minecraft.ListServers(name, ""),
             contentService.ListScreenshots(name, ""),
           ]);
           setWorldsCount(worlds);
-          setSkinCount(skins);
+          setSkinCount(skins + (devSkins || 0));
           setServersCount(servers?.length || 0);
           setScreenshotsCount(screenshots?.length || 0);
         } else if (safe.usersRoot) {
@@ -179,7 +189,12 @@ export const useContentPage = (t: TFunc) => {
                   );
                   const sep = safe.resourcePacks.includes("/") ? "/" : "\\";
                   const sp = `${dir}${sep}skin_packs`;
-                  setSkinCount(await countDirectories(sp));
+                  const devSp = safe.developmentSkinPacks || `${dir}${sep}development_skin_packs`;
+                  const [spCount, devSpCount] = await Promise.all([
+                    countDirectories(sp, true),
+                    countDirectories(devSp, true),
+                  ]);
+                  setSkinCount(spCount + devSpCount);
                 } else {
                   setSkinCount(0);
                 }
@@ -248,8 +263,14 @@ export const useContentPage = (t: TFunc) => {
           setServersCount(0);
           setScreenshotsCount(0);
         }
-        setResCount(await countDirectories(safe.resourcePacks));
-        setBpCount(await countDirectories(safe.behaviorPacks));
+        const [resNorm, resDev, bpNorm, bpDev] = await Promise.all([
+          countDirectories(safe.resourcePacks, true),
+          countDirectories(safe.developmentResourcePacks || "", true),
+          countDirectories(safe.behaviorPacks, true),
+          countDirectories(safe.developmentBehaviorPacks || "", true),
+        ]);
+        setResCount(resNorm + resDev);
+        setBpCount(bpNorm + bpDev);
       }
     } catch (e) {
       setError(t("contentpage.error_resolve_paths") as string);

@@ -19,9 +19,9 @@ func SetBaseRootOverride(path string) {
 func executableStorageRoot() string {
 	exeName := "levilauncher.exe"
 	if exe, err := os.Executable(); err == nil {
-		base := strings.TrimSpace(filepath.Base(exe))
-		if base != "" {
-			exeName = strings.ToLower(base)
+		base := strings.ToLower(strings.TrimSpace(filepath.Base(exe)))
+		if base != "" && !strings.Contains(base, "test") && !strings.HasPrefix(base, "main") && !strings.HasPrefix(base, "wails") {
+			exeName = base
 		}
 	}
 

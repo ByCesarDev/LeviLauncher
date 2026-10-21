@@ -445,7 +445,7 @@ func (m *Manager) DeletePack(name string, path string) string {
 		return "ERR_INVALID_PATH"
 	}
 	fi, err := os.Stat(p)
-	if err != nil || !fi.IsDir() {
+	if err != nil || (!fi.IsDir() && !strings.HasSuffix(strings.ToLower(p), ".mcpack") && !strings.HasSuffix(strings.ToLower(p), ".zip")) {
 		return "ERR_INVALID_PATH"
 	}
 	roots := m.getContentRoots(name)
@@ -685,12 +685,13 @@ func (m *Manager) ConvertPackToStandard(versionName string, packPath string, kee
 	if p == "" {
 		return "ERR_INVALID_PATH"
 	}
+	lowP := strings.ToLower(p)
+	isArchive := strings.HasSuffix(lowP, ".mcpack") || strings.HasSuffix(lowP, ".zip")
 	fi, err := os.Stat(p)
-	if err != nil || !fi.IsDir() {
+	if err != nil || (!fi.IsDir() && !isArchive) {
 		return "ERR_INVALID_PATH"
 	}
 	roots := m.getContentRoots(versionName)
-	lowP := strings.ToLower(p)
 
 	var targetDir string
 	if roots.DevelopmentResourcePacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.DevelopmentResourcePacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.DevelopmentResourcePacks)) {
@@ -708,6 +709,22 @@ func (m *Manager) ConvertPackToStandard(versionName string, packPath string, kee
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return "ERR_CREATE_TARGET_DIR"
+	}
+
+	if isArchive {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "ERR_READ_FILE"
+		}
+		base := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+		res := content.ImportMcpackToDirs2(b, base, roots.ResourcePacks, roots.BehaviorPacks, roots.SkinPacks, true)
+		if res != "" {
+			return res
+		}
+		if !keepOriginal {
+			_ = os.Remove(p)
+		}
+		return ""
 	}
 
 	destPath := filepath.Join(targetDir, filepath.Base(p))
@@ -782,16 +799,27 @@ func (m *Manager) SyncDevelopmentPacks(versionName string, keepOriginal bool) st
 		}
 		_ = os.MkdirAll(dstDir, 0o755)
 		for _, e := range ents {
-			if !e.IsDir() {
-				continue
-			}
 			srcP := filepath.Join(srcDir, e.Name())
-			dstP := filepath.Join(dstDir, e.Name())
-			if utils.DirExists(dstP) {
-				_ = os.RemoveAll(dstP)
-			}
-			if err := utils.CopyDir(srcP, dstP); err == nil && !keepOriginal {
-				_ = os.RemoveAll(srcP)
+			if e.IsDir() {
+				dstP := filepath.Join(dstDir, e.Name())
+				if utils.DirExists(dstP) {
+					_ = os.RemoveAll(dstP)
+				}
+				if err := utils.CopyDir(srcP, dstP); err == nil && !keepOriginal {
+					_ = os.RemoveAll(srcP)
+				}
+			} else {
+				lower := strings.ToLower(e.Name())
+				if strings.HasSuffix(lower, ".mcpack") || strings.HasSuffix(lower, ".zip") {
+					b, err := os.ReadFile(srcP)
+					if err == nil {
+						base := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+						content.ImportMcpackToDirs2(b, base, roots.ResourcePacks, roots.BehaviorPacks, roots.SkinPacks, true)
+						if !keepOriginal {
+							_ = os.Remove(srcP)
+						}
+					}
+				}
 			}
 		}
 	}
