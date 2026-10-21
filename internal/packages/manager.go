@@ -1,6 +1,9 @@
 package packages
 
 import (
+	"archive/zip"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,10 +42,33 @@ func (pm *PackManager) LoadPacksForVersion(versionName string, resourcePacksDir,
 		}
 
 		for _, e := range entries {
+			startPath := filepath.Join(dir, e.Name())
+			lower := strings.ToLower(e.Name())
+
 			if !e.IsDir() {
+				if strings.HasSuffix(lower, ".mcpack") || strings.HasSuffix(lower, ".zip") {
+					manifest, err := parseZipManifest(startPath, defaultType)
+					if err != nil {
+						base := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+						manifest = PackManifest{
+							Name:        base,
+							Description: "Archivo de paquete (" + filepath.Ext(e.Name()) + ")",
+							PackType:    defaultType,
+							Location:    startPath,
+							Identity: PackIdVersion{
+								PackType: defaultType,
+							},
+						}
+					}
+					manifest.IsDevelopment = isDev
+					packs = append(packs, Pack{
+						Manifest:      manifest,
+						Path:          startPath,
+						IsDevelopment: isDev,
+					})
+				}
 				continue
 			}
-			startPath := filepath.Join(dir, e.Name())
 
 			var findPackRoot func(current string, depth int) string
 			findPackRoot = func(current string, depth int) string {
@@ -72,20 +98,44 @@ func (pm *PackManager) LoadPacksForVersion(versionName string, resourcePacksDir,
 
 			packPath := findPackRoot(startPath, 0)
 			if packPath == "" {
+				// Carpeta vacía o sin manifest.json: se muestra de respaldo
+				packs = append(packs, Pack{
+					Manifest: PackManifest{
+						Name:        e.Name(),
+						Description: "Carpeta sin manifest.json",
+						PackType:    defaultType,
+						Location:    startPath,
+						Identity: PackIdVersion{
+							PackType: defaultType,
+						},
+						IsDevelopment: isDev,
+					},
+					Path:          startPath,
+					IsDevelopment: isDev,
+				})
 				continue
 			}
 
 			manifestPath := filepath.Join(packPath, "manifest.json")
-
 			manifest, err := parseManifest(manifestPath, defaultType)
-			if err == nil {
-				manifest.IsDevelopment = isDev
-				packs = append(packs, Pack{
-					Manifest:      manifest,
-					Path:          packPath,
+			if err != nil {
+				manifest = PackManifest{
+					Name:        e.Name(),
+					Description: "Error al leer manifest.json",
+					PackType:    defaultType,
+					Location:    packPath,
+					Identity: PackIdVersion{
+						PackType: defaultType,
+					},
 					IsDevelopment: isDev,
-				})
+				}
 			}
+			manifest.IsDevelopment = isDev
+			packs = append(packs, Pack{
+				Manifest:      manifest,
+				Path:          packPath,
+				IsDevelopment: isDev,
+			})
 		}
 	}
 
@@ -145,14 +195,21 @@ func parseManifest(path string, defaultType PackType) (PackManifest, error) {
 	pm.Identity.PackType = defaultType
 
 	for _, mod := range raw.Modules {
-		switch strings.ToLower(mod.Type) {
+		switch strings.ToLower(strings.TrimSpace(mod.Type)) {
 		case "resources":
-			pm.PackType = PackTypeResources
-		case "data":
-			pm.PackType = PackTypeBehavior
+			if defaultType == PackTypeResources || pm.PackType == PackTypeInvalid {
+				pm.PackType = PackTypeResources
+			}
+		case "data", "client_data", "script", "javascript":
+			if defaultType == PackTypeBehavior || pm.PackType == PackTypeInvalid {
+				pm.PackType = PackTypeBehavior
+			}
 		case "skin_pack":
 			pm.PackType = PackTypeSkins
 		}
+	}
+	if pm.PackType == PackTypeInvalid {
+		pm.PackType = defaultType
 	}
 	pm.Identity.PackType = pm.PackType
 
@@ -279,4 +336,84 @@ func ParseVersion(v interface{}) []int {
 		return res
 	}
 	return nil
+}
+
+
+func parseZipManifest(zipPath string, defaultType PackType) (PackManifest, error) {
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return PackManifest{}, err
+	}
+	defer zr.Close()
+
+	var manifestFile *zip.File
+	for _, f := range zr.File {
+		clean := filepath.ToSlash(f.Name)
+		if strings.EqualFold(clean, "manifest.json") || strings.HasSuffix(strings.ToLower(clean), "/manifest.json") {
+			manifestFile = f
+			break
+		}
+	}
+	if manifestFile == nil {
+		return PackManifest{}, fmt.Errorf("no manifest.json found in zip")
+	}
+
+	rc, err := manifestFile.Open()
+	if err != nil {
+		return PackManifest{}, err
+	}
+	defer rc.Close()
+
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return PackManifest{}, err
+	}
+
+	b = utils.JsonCompatBytes(b)
+
+	var raw RawManifest
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return PackManifest{}, err
+	}
+
+	pm := PackManifest{}
+	pm.Identity.UUID = raw.Header.UUID
+
+	version := ParseVersion(raw.Header.Version)
+	if len(version) >= 3 {
+		pm.Identity.Version = SemVersion{
+			Major: version[0],
+			Minor: version[1],
+			Patch: version[2],
+		}
+	}
+
+	pm.PackType = defaultType
+	for _, mod := range raw.Modules {
+		switch strings.ToLower(strings.TrimSpace(mod.Type)) {
+		case "resources":
+			if defaultType == PackTypeResources || pm.PackType == PackTypeInvalid {
+				pm.PackType = PackTypeResources
+			}
+		case "data", "client_data", "script", "javascript":
+			if defaultType == PackTypeBehavior || pm.PackType == PackTypeInvalid {
+				pm.PackType = PackTypeBehavior
+			}
+		case "skin_pack":
+			pm.PackType = PackTypeSkins
+		}
+	}
+	if pm.PackType == PackTypeInvalid {
+		pm.PackType = defaultType
+	}
+	pm.Identity.PackType = pm.PackType
+
+	pm.Name = raw.Header.Name
+	if pm.Name == "" || pm.Name == "pack.name" {
+		base := filepath.Base(zipPath)
+		pm.Name = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	pm.Description = raw.Header.Description
+	pm.Location = zipPath
+	return pm, nil
 }

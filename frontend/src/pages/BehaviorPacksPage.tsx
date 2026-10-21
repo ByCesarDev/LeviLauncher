@@ -54,7 +54,7 @@ import {
   GetVersionLogoDataUrl,
   ListVersionMetas,
 } from "bindings/github.com/liteldev/LeviLauncher/internal/app/versionservice";
-import { readCurrentVersionName } from "@/utils/currentVersion";
+import { readCurrentVersionName, saveCurrentVersionName } from "@/utils/currentVersion";
 import * as minecraft from "bindings/github.com/liteldev/LeviLauncher/internal/app/minecraft";
 import { renderMcText } from "@/utils/mcformat";
 import { PageHeader } from "@/components/PageHeader";
@@ -167,7 +167,16 @@ export default function BehaviorPacksPage() {
     async (silent?: boolean) => {
       if (!silent) setLoading(true);
       setError("");
-      const name = readCurrentVersionName();
+      let name = readCurrentVersionName();
+      if (!name && hasBackend) {
+        try {
+          const metas: any = await ListVersionMetas();
+          if (Array.isArray(metas) && metas.length > 0 && metas[0]?.name) {
+            name = metas[0].name;
+            saveCurrentVersionName(name, "behaviorpage.fallback");
+          }
+        } catch {}
+      }
       setCurrentVersionName(name);
       try {
         if (!hasBackend || !name) {
@@ -182,20 +191,21 @@ export default function BehaviorPacksPage() {
           setRoots(safe);
 
           const filtered = (allPacks || []).filter(
-            (p) => p.manifest.pack_type === 4,
+            (p) => p.manifest.pack_type === 4 || p.path?.toLowerCase().includes("behavior_packs"),
           );
 
           const basic = await Promise.all(
             filtered.map(async (p) => {
               const isDev = Boolean(p.isDevelopment || (p.manifest as any)?.is_development || p.path?.toLowerCase().includes("development_"));
+              const fallbackName = p.manifest.name || (p.path ? p.path.split(/[\\/]/).filter(Boolean).pop() : "");
               try {
                 const info = await GetPackInfo(p.path);
-                return { ...info, path: p.path, isDevelopment: isDev || info.isDevelopment };
+                return { ...info, name: info.name || fallbackName, path: p.path, isDevelopment: isDev || info.isDevelopment };
               } catch {
                 return {
-                  name: p.manifest.name,
+                  name: fallbackName,
                   description: p.manifest.description,
-                  version: p.manifest.identity.version
+                  version: p.manifest.identity?.version
                     ? `${p.manifest.identity.version.major}.${p.manifest.identity.version.minor}.${p.manifest.identity.version.patch}`
                     : "",
                   minEngineVersion: "",

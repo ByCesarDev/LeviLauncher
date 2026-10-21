@@ -961,10 +961,62 @@ func ReadPackInfoFromDir(dir string) types.PackInfo {
 	if d == "" {
 		return info
 	}
+	lower := strings.ToLower(filepath.ToSlash(d))
+	isDev := strings.Contains(lower, "development_resource_packs") || strings.Contains(lower, "development_behavior_packs") || strings.Contains(lower, "development_skin_packs")
+	info.IsDevelopment = isDev
+	info.Path = d
+
+	// If it is a .mcpack or .zip file
+	if strings.HasSuffix(lower, ".mcpack") || strings.HasSuffix(lower, ".zip") {
+		base := filepath.Base(d)
+		info.Name = strings.TrimSuffix(base, filepath.Ext(base))
+		if zr, err := zip.OpenReader(d); err == nil {
+			defer zr.Close()
+			for _, f := range zr.File {
+				clean := filepath.ToSlash(f.Name)
+				if strings.EqualFold(clean, "manifest.json") || strings.HasSuffix(strings.ToLower(clean), "/manifest.json") {
+					if rc, err := f.Open(); err == nil {
+						if b, err := io.ReadAll(rc); err == nil {
+							var mf packages.RawManifest
+							_ = json.Unmarshal(utils.JsonCompatBytes(b), &mf)
+							if strings.TrimSpace(mf.Header.Name) != "" && mf.Header.Name != "pack.name" {
+								info.Name = strings.TrimSpace(mf.Header.Name)
+							}
+							info.Description = strings.TrimSpace(mf.Header.Description)
+							version := packages.ParseVersion(mf.Header.Version)
+							if len(version) > 0 {
+								var vb strings.Builder
+								for i, n := range version {
+									if i > 0 {
+										vb.WriteRune('.')
+									}
+									vb.WriteString(fmt.Sprintf("%d", n))
+								}
+								info.Version = vb.String()
+							}
+						}
+						_ = rc.Close()
+					}
+				}
+				if strings.EqualFold(clean, "pack_icon.png") || strings.HasSuffix(strings.ToLower(clean), "/pack_icon.png") {
+					if rc, err := f.Open(); err == nil {
+						if b, err := io.ReadAll(rc); err == nil {
+							enc := base64.StdEncoding.EncodeToString(b)
+							info.IconDataUrl = "data:image/png;base64," + enc
+						}
+						_ = rc.Close()
+					}
+				}
+			}
+		}
+		return info
+	}
+
 	target := findManifestDir(d)
 	if strings.TrimSpace(target) == "" {
 		target = d
 	}
+	info.Path = target
 	manifestPath := filepath.Join(target, "manifest.json")
 	if utils.FileExists(manifestPath) {
 		if b, err := os.ReadFile(manifestPath); err == nil {
@@ -1013,17 +1065,16 @@ func ReadPackInfoFromDir(dir string) types.PackInfo {
 			}
 		}
 	}
+	if info.Name == "" {
+		base := filepath.Base(d)
+		info.Name = strings.TrimSuffix(base, filepath.Ext(base))
+	}
 	iconPath := filepath.Join(target, "pack_icon.png")
 	if utils.FileExists(iconPath) {
 		if b, err := os.ReadFile(iconPath); err == nil {
 			enc := base64.StdEncoding.EncodeToString(b)
 			info.IconDataUrl = "data:image/png;base64," + enc
 		}
-	}
-	info.Path = target
-	lower := strings.ToLower(filepath.ToSlash(target))
-	if strings.Contains(lower, "development_resource_packs") || strings.Contains(lower, "development_behavior_packs") || strings.Contains(lower, "development_skin_packs") {
-		info.IsDevelopment = true
 	}
 	return info
 }

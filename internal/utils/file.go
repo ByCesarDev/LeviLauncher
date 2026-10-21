@@ -2,6 +2,7 @@ package utils
 
 import (
 	"archive/zip"
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -210,7 +211,7 @@ func CopyDir(src, dst string) error {
 }
 
 func JsonCompatBytes(data []byte) []byte {
-	src := data
+	src := bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	n := len(src)
 	out := make([]byte, 0, n)
 	inString := false

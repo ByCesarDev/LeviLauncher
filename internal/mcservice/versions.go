@@ -159,9 +159,43 @@ func isolationDirName(packageType, channel string) string {
 	return "Minecraft Bedrock"
 }
 
+// ResolveActiveVersionName returns name if non-empty, or scans VersionsDir()
+// for installed versions and picks the one most recently updated or first available.
+func ResolveActiveVersionName(name string) string {
+	verName := strings.TrimSpace(name)
+	if verName != "" {
+		return verName
+	}
+	vdir, err := apppath.VersionsDir()
+	if err != nil || strings.TrimSpace(vdir) == "" {
+		return ""
+	}
+	ents, err := os.ReadDir(vdir)
+	if err != nil {
+		return ""
+	}
+	var bestName string
+	var bestModTime time.Time
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(vdir, e.Name())
+		metaPath := filepath.Join(dir, "version.json")
+		fi, err := os.Stat(metaPath)
+		if err == nil {
+			if bestName == "" || fi.ModTime().After(bestModTime) {
+				bestName = e.Name()
+				bestModTime = fi.ModTime()
+			}
+		}
+	}
+	return bestName
+}
+
 func GetContentRoots(name string) types.ContentRoots {
 	roots := types.ContentRoots{Base: "", UsersRoot: "", ResourcePacks: "", BehaviorPacks: "", DevelopmentResourcePacks: "", DevelopmentBehaviorPacks: "", DevelopmentSkinPacks: "", IsIsolation: false, IsPreview: false}
-	verName := strings.TrimSpace(name)
+	verName := ResolveActiveVersionName(name)
 	isPreview := false
 	isIsolation := false
 	channel := ""
@@ -183,23 +217,22 @@ func GetContentRoots(name string) types.ContentRoots {
 	roots.IsPreview = isPreview
 	roots.PackageType = packageType
 	if packageType == "uwp" {
-		// Isolated UWP redirects ApplicationData into the instance's data folder,
-		// named per channel to match GDK. Non-isolated instances share the Windows
-		// package family's LocalState.
-		if isIsolation && verName != "" {
+		if verName != "" {
 			if vdir, err := apppath.VersionsDir(); err == nil && strings.TrimSpace(vdir) != "" {
 				base := filepath.Join(vdir, verName, isolationDirName(packageType, channel))
-				roots.Base = base
-				roots.ComMojangRoot = filepath.Join(base, "games", "com.mojang")
-				roots.Worlds = filepath.Join(roots.ComMojangRoot, "minecraftWorlds")
-				roots.ResourcePacks = filepath.Join(roots.ComMojangRoot, "resource_packs")
-				roots.BehaviorPacks = filepath.Join(roots.ComMojangRoot, "behavior_packs")
-				roots.SkinPacks = filepath.Join(roots.ComMojangRoot, "skin_packs")
-				roots.DevelopmentResourcePacks = filepath.Join(roots.ComMojangRoot, "development_resource_packs")
-				roots.DevelopmentBehaviorPacks = filepath.Join(roots.ComMojangRoot, "development_behavior_packs")
-				roots.DevelopmentSkinPacks = filepath.Join(roots.ComMojangRoot, "development_skin_packs")
-				roots.Screenshots = filepath.Join(roots.ComMojangRoot, "Screenshots")
-				return roots
+				if utils.DirExists(base) || isIsolation {
+					roots.Base = base
+					roots.ComMojangRoot = filepath.Join(base, "games", "com.mojang")
+					roots.Worlds = filepath.Join(roots.ComMojangRoot, "minecraftWorlds")
+					roots.ResourcePacks = filepath.Join(roots.ComMojangRoot, "resource_packs")
+					roots.BehaviorPacks = filepath.Join(roots.ComMojangRoot, "behavior_packs")
+					roots.SkinPacks = filepath.Join(roots.ComMojangRoot, "skin_packs")
+					roots.DevelopmentResourcePacks = filepath.Join(roots.ComMojangRoot, "development_resource_packs")
+					roots.DevelopmentBehaviorPacks = filepath.Join(roots.ComMojangRoot, "development_behavior_packs")
+					roots.DevelopmentSkinPacks = filepath.Join(roots.ComMojangRoot, "development_skin_packs")
+					roots.Screenshots = filepath.Join(roots.ComMojangRoot, "Screenshots")
+					return roots
+				}
 			}
 		}
 		roots.IsIsolation = false
@@ -228,11 +261,15 @@ func GetContentRoots(name string) types.ContentRoots {
 		gameDirName = "Minecraft Bedrock Preview"
 	}
 	base := ""
-	if isIsolation && verName != "" {
+	if verName != "" {
 		if vdir, err := apppath.VersionsDir(); err == nil && strings.TrimSpace(vdir) != "" {
-			base = filepath.Join(vdir, verName, gameDirName)
+			candidate := filepath.Join(vdir, verName, gameDirName)
+			if utils.DirExists(candidate) || isIsolation || utils.DirExists(filepath.Join(vdir, verName)) {
+				base = candidate
+			}
 		}
-	} else {
+	}
+	if base == "" {
 		base = utils.GetMinecraftGDKDataPath(isPreview)
 		base = strings.TrimSpace(base)
 	}
@@ -267,6 +304,11 @@ func GetContentCounts(name string) ContentCounts {
 		for _, e := range ents {
 			if e.IsDir() {
 				n++
+			} else {
+				lower := strings.ToLower(e.Name())
+				if strings.HasSuffix(lower, ".mcpack") || strings.HasSuffix(lower, ".zip") {
+					n++
+				}
 			}
 		}
 		return n
