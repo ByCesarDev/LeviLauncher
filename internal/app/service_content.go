@@ -180,3 +180,24 @@ func (s *ContentService) DeleteScreenshot(versionName string, player string, pat
 	}
 	return s.manager.DeleteScreenshot(versionName, player, path)
 }
+
+func (s *ContentService) ConvertPackToStandard(versionName string, packPath string, keepOriginal bool) string {
+	if s.manager == nil {
+		return "ERR_ACCESS_VERSIONS_DIR"
+	}
+	return s.manager.ConvertPackToStandard(versionName, packPath, keepOriginal)
+}
+
+func (s *ContentService) ConvertPackToDevelopment(versionName string, packPath string, keepOriginal bool) string {
+	if s.manager == nil {
+		return "ERR_ACCESS_VERSIONS_DIR"
+	}
+	return s.manager.ConvertPackToDevelopment(versionName, packPath, keepOriginal)
+}
+
+func (s *ContentService) SyncDevelopmentPacks(versionName string, keepOriginal bool) string {
+	if s.manager == nil {
+		return "ERR_ACCESS_VERSIONS_DIR"
+	}
+	return s.manager.SyncDevelopmentPacks(versionName, keepOriginal)
+}

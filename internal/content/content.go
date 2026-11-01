@@ -1021,6 +1021,10 @@ func ReadPackInfoFromDir(dir string) types.PackInfo {
 		}
 	}
 	info.Path = target
+	lower := strings.ToLower(filepath.ToSlash(target))
+	if strings.Contains(lower, "development_resource_packs") || strings.Contains(lower, "development_behavior_packs") || strings.Contains(lower, "development_skin_packs") {
+		info.IsDevelopment = true
+	}
 	return info
 }
 

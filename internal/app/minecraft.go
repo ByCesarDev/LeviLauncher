@@ -234,6 +234,9 @@ type contentService interface {
 	DeleteWorld(name string, path string) string
 	ListScreenshots(versionName string, player string) []contentmgr.ScreenshotInfo
 	DeleteScreenshot(versionName string, player string, path string) string
+	ConvertPackToStandard(versionName string, packPath string, keepOriginal bool) string
+	ConvertPackToDevelopment(versionName string, packPath string, keepOriginal bool) string
+	SyncDevelopmentPacks(versionName string, keepOriginal bool) string
 }
 
 type MinecraftDeps struct {

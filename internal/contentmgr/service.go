@@ -239,6 +239,8 @@ func (m *Manager) TransferPackToVersion(sourceVersionName string, sourcePackPath
 	allowedSourceRoots := []string{
 		strings.TrimSpace(srcRoots.ResourcePacks),
 		strings.TrimSpace(srcRoots.BehaviorPacks),
+		strings.TrimSpace(srcRoots.DevelopmentResourcePacks),
+		strings.TrimSpace(srcRoots.DevelopmentBehaviorPacks),
 	}
 	if strings.TrimSpace(srcRoots.ResourcePacks) != "" {
 		allowedSourceRoots = append(
@@ -447,7 +449,14 @@ func (m *Manager) DeletePack(name string, path string) string {
 		return "ERR_INVALID_PATH"
 	}
 	roots := m.getContentRoots(name)
-	allowed := []string{strings.TrimSpace(roots.ResourcePacks), strings.TrimSpace(roots.BehaviorPacks), strings.TrimSpace(roots.SkinPacks)}
+	allowed := []string{
+		strings.TrimSpace(roots.ResourcePacks),
+		strings.TrimSpace(roots.BehaviorPacks),
+		strings.TrimSpace(roots.SkinPacks),
+		strings.TrimSpace(roots.DevelopmentResourcePacks),
+		strings.TrimSpace(roots.DevelopmentBehaviorPacks),
+		strings.TrimSpace(roots.DevelopmentSkinPacks),
+	}
 	usersRoot := strings.TrimSpace(roots.UsersRoot)
 	if usersRoot != "" {
 		ents := m.listDir(usersRoot)
@@ -667,5 +676,127 @@ func (m *Manager) DeleteScreenshot(versionName string, player string, path strin
 	for _, ext := range exts {
 		_ = os.Remove(baseName + ext)
 	}
+	return ""
+}
+
+// ConvertPackToStandard moves or copies a development pack to standard resource_packs/behavior_packs.
+func (m *Manager) ConvertPackToStandard(versionName string, packPath string, keepOriginal bool) string {
+	p := filepath.Clean(strings.TrimSpace(packPath))
+	if p == "" {
+		return "ERR_INVALID_PATH"
+	}
+	fi, err := os.Stat(p)
+	if err != nil || !fi.IsDir() {
+		return "ERR_INVALID_PATH"
+	}
+	roots := m.getContentRoots(versionName)
+	lowP := strings.ToLower(p)
+
+	var targetDir string
+	if roots.DevelopmentResourcePacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.DevelopmentResourcePacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.DevelopmentResourcePacks)) {
+		targetDir = roots.ResourcePacks
+	} else if roots.DevelopmentBehaviorPacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.DevelopmentBehaviorPacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.DevelopmentBehaviorPacks)) {
+		targetDir = roots.BehaviorPacks
+	} else if roots.DevelopmentSkinPacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.DevelopmentSkinPacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.DevelopmentSkinPacks)) {
+		targetDir = roots.SkinPacks
+	} else {
+		return "ERR_NOT_DEVELOPMENT_PACK"
+	}
+
+	if strings.TrimSpace(targetDir) == "" {
+		return "ERR_ACCESS_VERSIONS_DIR"
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "ERR_CREATE_TARGET_DIR"
+	}
+
+	destPath := filepath.Join(targetDir, filepath.Base(p))
+	if utils.DirExists(destPath) {
+		_ = os.RemoveAll(destPath)
+	}
+
+	if err := utils.CopyDir(p, destPath); err != nil {
+		return "ERR_WRITE_FILE"
+	}
+	if !keepOriginal {
+		_ = os.RemoveAll(p)
+	}
+	return ""
+}
+
+// ConvertPackToDevelopment moves or copies a standard pack to development_resource_packs/development_behavior_packs.
+func (m *Manager) ConvertPackToDevelopment(versionName string, packPath string, keepOriginal bool) string {
+	p := filepath.Clean(strings.TrimSpace(packPath))
+	if p == "" {
+		return "ERR_INVALID_PATH"
+	}
+	fi, err := os.Stat(p)
+	if err != nil || !fi.IsDir() {
+		return "ERR_INVALID_PATH"
+	}
+	roots := m.getContentRoots(versionName)
+	lowP := strings.ToLower(p)
+
+	var targetDir string
+	if roots.ResourcePacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.ResourcePacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.ResourcePacks)) {
+		targetDir = roots.DevelopmentResourcePacks
+	} else if roots.BehaviorPacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.BehaviorPacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.BehaviorPacks)) {
+		targetDir = roots.DevelopmentBehaviorPacks
+	} else if roots.SkinPacks != "" && (strings.HasPrefix(lowP, strings.ToLower(filepath.Clean(roots.SkinPacks))+string(os.PathSeparator)) || strings.EqualFold(filepath.Dir(p), roots.SkinPacks)) {
+		targetDir = roots.DevelopmentSkinPacks
+	} else {
+		return "ERR_NOT_STANDARD_PACK"
+	}
+
+	if strings.TrimSpace(targetDir) == "" {
+		return "ERR_ACCESS_VERSIONS_DIR"
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "ERR_CREATE_TARGET_DIR"
+	}
+
+	destPath := filepath.Join(targetDir, filepath.Base(p))
+	if utils.DirExists(destPath) {
+		_ = os.RemoveAll(destPath)
+	}
+
+	if err := utils.CopyDir(p, destPath); err != nil {
+		return "ERR_WRITE_FILE"
+	}
+	if !keepOriginal {
+		_ = os.RemoveAll(p)
+	}
+	return ""
+}
+
+// SyncDevelopmentPacks copies all development packs into standard folders so Minecraft Bedrock can read them.
+func (m *Manager) SyncDevelopmentPacks(versionName string, keepOriginal bool) string {
+	roots := m.getContentRoots(versionName)
+	syncDirs := func(srcDir, dstDir string) {
+		if srcDir == "" || dstDir == "" || !utils.DirExists(srcDir) {
+			return
+		}
+		ents, err := os.ReadDir(srcDir)
+		if err != nil {
+			return
+		}
+		_ = os.MkdirAll(dstDir, 0o755)
+		for _, e := range ents {
+			if !e.IsDir() {
+				continue
+			}
+			srcP := filepath.Join(srcDir, e.Name())
+			dstP := filepath.Join(dstDir, e.Name())
+			if utils.DirExists(dstP) {
+				_ = os.RemoveAll(dstP)
+			}
+			if err := utils.CopyDir(srcP, dstP); err == nil && !keepOriginal {
+				_ = os.RemoveAll(srcP)
+			}
+		}
+	}
+	syncDirs(roots.DevelopmentResourcePacks, roots.ResourcePacks)
+	syncDirs(roots.DevelopmentBehaviorPacks, roots.BehaviorPacks)
+	syncDirs(roots.DevelopmentSkinPacks, roots.SkinPacks)
 	return ""
 }

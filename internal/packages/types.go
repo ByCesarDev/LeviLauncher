@@ -52,11 +52,13 @@ type PackManifest struct {
 	Description             string           `json:"description"`
 	Location                string           `json:"location"`
 	PackIconLocation        string           `json:"pack_icon_location"`
+	IsDevelopment           bool             `json:"is_development,omitempty"`
 }
 
 type Pack struct {
-	Manifest PackManifest `json:"manifest"`
-	Path     string       `json:"path"`
+	Manifest      PackManifest `json:"manifest"`
+	Path          string       `json:"path"`
+	IsDevelopment bool         `json:"isDevelopment,omitempty"`
 }
 
 type PackManager struct {

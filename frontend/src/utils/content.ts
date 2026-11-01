@@ -12,6 +12,9 @@ export const EMPTY_CONTENT_ROOTS = {
   usersRoot: "",
   resourcePacks: "",
   behaviorPacks: "",
+  developmentResourcePacks: "",
+  developmentBehaviorPacks: "",
+  developmentSkinPacks: "",
   isIsolation: false,
   isPreview: false,
 };

@@ -11,6 +11,8 @@ tasks:
       - src/**/*.h
     generates:
       - ../../internal/leviloader/LeviLauncher.dll
+    status:
+      - test -f ../../internal/leviloader/LeviLauncher.dll
     cmds:
       - xmake f -p windows -a x64 -m release --toolchain=msvc --deploy=y -y
       - xmake build -r LeviLauncher
@@ -34,10 +36,13 @@ tasks:
     status:
       - test -f node_modules/.package-lock.json
     preconditions:
-      - sh: npm version
+      - sh: npm.cmd --version || npm --version
         msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
     cmds:
-      - npm ci
+      - cmd: npm.cmd ci
+        platforms: [windows]
+      - cmd: npm ci
+        platforms: [linux, darwin]
 
   build:frontend:
     label: build:frontend (PRODUCTION={{.PRODUCTION}})
@@ -54,7 +59,10 @@ tasks:
           BUILD_FLAGS:
             ref: .BUILD_FLAGS
     cmds:
-      - npm run {{.BUILD_COMMAND}} -q
+      - cmd: npm.cmd run {{.BUILD_COMMAND}} -q
+        platforms: [windows]
+      - cmd: npm run {{.BUILD_COMMAND}} -q
+        platforms: [linux, darwin]
     env:
       PRODUCTION: '{{.PRODUCTION | default "false"}}'
     vars:
@@ -86,6 +94,8 @@ tasks:
       - "appicon.png"
     generates:
       - "windows/icon.ico"
+    status:
+      - test -f windows/icon.ico
     cmds:
       # This project only targets Windows. Passing an empty -macfilename stops
       # Wails v3.0.0 from also writing the default build/darwin/icon.icns,
@@ -99,7 +109,10 @@ tasks:
       - task: install:frontend:deps
     cmds:
       # The Wails development asset proxy connects to localhost over IPv4.
-      - npm run dev -- --host 127.0.0.1 --port {{.VITE_PORT}} --strictPort
+      - cmd: npm.cmd run dev -- --host 127.0.0.1 --port {{.VITE_PORT}} --strictPort
+        platforms: [windows]
+      - cmd: npm run dev -- --host 127.0.0.1 --port {{.VITE_PORT}} --strictPort
+        platforms: [linux, darwin]
 
   update:build-assets:
     summary: Updates the build assets

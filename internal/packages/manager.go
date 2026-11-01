@@ -29,7 +29,7 @@ type RawManifest struct {
 func (pm *PackManager) LoadPacksForVersion(versionName string, resourcePacksDir, behaviorPacksDir string, skinPacksDirs ...string) ([]Pack, error) {
 	var packs []Pack
 
-	scanDir := func(dir string, defaultType PackType) {
+	scanDir := func(dir string, defaultType PackType, isDev bool) {
 		if !utils.DirExists(dir) {
 			return
 		}
@@ -79,18 +79,34 @@ func (pm *PackManager) LoadPacksForVersion(versionName string, resourcePacksDir,
 
 			manifest, err := parseManifest(manifestPath, defaultType)
 			if err == nil {
+				manifest.IsDevelopment = isDev
 				packs = append(packs, Pack{
-					Manifest: manifest,
-					Path:     packPath,
+					Manifest:      manifest,
+					Path:          packPath,
+					IsDevelopment: isDev,
 				})
 			}
 		}
 	}
 
-	scanDir(resourcePacksDir, PackTypeResources)
-	scanDir(behaviorPacksDir, PackTypeBehavior)
+	scanDir(resourcePacksDir, PackTypeResources, false)
+	if resourcePacksDir != "" {
+		devRes := filepath.Join(filepath.Dir(resourcePacksDir), "development_resource_packs")
+		scanDir(devRes, PackTypeResources, true)
+	}
+
+	scanDir(behaviorPacksDir, PackTypeBehavior, false)
+	if behaviorPacksDir != "" {
+		devBp := filepath.Join(filepath.Dir(behaviorPacksDir), "development_behavior_packs")
+		scanDir(devBp, PackTypeBehavior, true)
+	}
+
 	for _, dir := range skinPacksDirs {
-		scanDir(dir, PackTypeSkins)
+		scanDir(dir, PackTypeSkins, false)
+		if dir != "" {
+			devSkins := filepath.Join(filepath.Dir(dir), "development_skin_packs")
+			scanDir(devSkins, PackTypeSkins, true)
+		}
 	}
 
 	pm.mu.Lock()
