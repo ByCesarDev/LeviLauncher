@@ -38,8 +38,10 @@ import {
   FaClock,
   FaHdd,
   FaTag,
-  FaExchangeAlt
+  FaExchangeAlt,
+  FaCode
 } from "react-icons/fa";
+import * as contentService from "bindings/github.com/liteldev/LeviLauncher/internal/app/contentservice";
 import {
   GetContentRoots,
   ListPacksForVersion,
@@ -185,9 +187,10 @@ export default function BehaviorPacksPage() {
 
           const basic = await Promise.all(
             filtered.map(async (p) => {
+              const isDev = Boolean(p.isDevelopment || (p.manifest as any)?.is_development || p.path?.toLowerCase().includes("development_"));
               try {
                 const info = await GetPackInfo(p.path);
-                return { ...info, path: p.path };
+                return { ...info, path: p.path, isDevelopment: isDev || info.isDevelopment };
               } catch {
                 return {
                   name: p.manifest.name,
@@ -198,6 +201,7 @@ export default function BehaviorPacksPage() {
                   minEngineVersion: "",
                   iconDataUrl: "",
                   path: p.path,
+                  isDevelopment: isDev,
                 };
               }
             }),
@@ -803,9 +807,54 @@ export default function BehaviorPacksPage() {
                               <span>v{p.version}</span>
                             </div>
                           )}
+                          {p.isDevelopment && (
+                            <div className="flex items-center gap-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold px-2 py-1 rounded-lg border border-amber-500/20" title="Paquete en development_behavior_packs">
+                              <FaCode className="text-amber-500" />
+                              <span>Dev</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ml-4">
+                          {p.isDevelopment && (
+                            <Tooltip>
+                              <Button
+                                isIconOnly
+                                aria-label="Pasar a paquete estándar"
+                                size="sm"
+                                variant={"secondary"}
+                                onClick={(event) => event.stopPropagation()}
+                                onPress={async () => {
+                                  try {
+                                    const fn = (contentService as any).ConvertPackToStandard;
+                                    if (typeof fn === "function") {
+                                      const res = await fn(currentVersionName, p.path, false);
+                                      if (res) {
+                                        toast("Error", { description: res, variant: "danger" });
+                                      } else {
+                                        toast(t("common.success") || "Éxito", {
+                                          description: "Convertido a estándar para que Minecraft lo lea",
+                                          variant: "success",
+                                        });
+                                        await refreshAll(true);
+                                      }
+                                    }
+                                  } catch (e) {
+                                    toast("Error", { description: String(e), variant: "danger" });
+                                  }
+                                }}
+                                className={cn(
+                                  "rounded-full",
+                                  "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50",
+                                )}
+                              >
+                                <FaExchangeAlt size={13} />
+                              </Button>
+                              <Tooltip.Content>
+                                Pasar a estándar (para que el juego lo lea)
+                              </Tooltip.Content>
+                            </Tooltip>
+                          )}
                           <Tooltip>
                             <Button
                               isIconOnly

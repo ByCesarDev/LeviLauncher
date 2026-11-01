@@ -160,7 +160,7 @@ func isolationDirName(packageType, channel string) string {
 }
 
 func GetContentRoots(name string) types.ContentRoots {
-	roots := types.ContentRoots{Base: "", UsersRoot: "", ResourcePacks: "", BehaviorPacks: "", IsIsolation: false, IsPreview: false}
+	roots := types.ContentRoots{Base: "", UsersRoot: "", ResourcePacks: "", BehaviorPacks: "", DevelopmentResourcePacks: "", DevelopmentBehaviorPacks: "", DevelopmentSkinPacks: "", IsIsolation: false, IsPreview: false}
 	verName := strings.TrimSpace(name)
 	isPreview := false
 	isIsolation := false
@@ -195,6 +195,9 @@ func GetContentRoots(name string) types.ContentRoots {
 				roots.ResourcePacks = filepath.Join(roots.ComMojangRoot, "resource_packs")
 				roots.BehaviorPacks = filepath.Join(roots.ComMojangRoot, "behavior_packs")
 				roots.SkinPacks = filepath.Join(roots.ComMojangRoot, "skin_packs")
+				roots.DevelopmentResourcePacks = filepath.Join(roots.ComMojangRoot, "development_resource_packs")
+				roots.DevelopmentBehaviorPacks = filepath.Join(roots.ComMojangRoot, "development_behavior_packs")
+				roots.DevelopmentSkinPacks = filepath.Join(roots.ComMojangRoot, "development_skin_packs")
 				roots.Screenshots = filepath.Join(roots.ComMojangRoot, "Screenshots")
 				return roots
 			}
@@ -214,6 +217,9 @@ func GetContentRoots(name string) types.ContentRoots {
 		roots.ResourcePacks = filepath.Join(roots.ComMojangRoot, "resource_packs")
 		roots.BehaviorPacks = filepath.Join(roots.ComMojangRoot, "behavior_packs")
 		roots.SkinPacks = filepath.Join(roots.ComMojangRoot, "skin_packs")
+		roots.DevelopmentResourcePacks = filepath.Join(roots.ComMojangRoot, "development_resource_packs")
+		roots.DevelopmentBehaviorPacks = filepath.Join(roots.ComMojangRoot, "development_behavior_packs")
+		roots.DevelopmentSkinPacks = filepath.Join(roots.ComMojangRoot, "development_skin_packs")
 		roots.Screenshots = filepath.Join(roots.ComMojangRoot, "Screenshots")
 		return roots
 	}
@@ -240,6 +246,9 @@ func GetContentRoots(name string) types.ContentRoots {
 	roots.ResourcePacks = filepath.Join(shared, "resource_packs")
 	roots.BehaviorPacks = filepath.Join(shared, "behavior_packs")
 	roots.SkinPacks = filepath.Join(shared, "skin_packs")
+	roots.DevelopmentResourcePacks = filepath.Join(shared, "development_resource_packs")
+	roots.DevelopmentBehaviorPacks = filepath.Join(shared, "development_behavior_packs")
+	roots.DevelopmentSkinPacks = filepath.Join(shared, "development_skin_packs")
 	return roots
 }
 
@@ -262,8 +271,8 @@ func GetContentCounts(name string) ContentCounts {
 		}
 		return n
 	}
-	res := countDirs(roots.ResourcePacks)
-	bp := countDirs(roots.BehaviorPacks)
+	res := countDirs(roots.ResourcePacks) + countDirs(roots.DevelopmentResourcePacks)
+	bp := countDirs(roots.BehaviorPacks) + countDirs(roots.DevelopmentBehaviorPacks)
 	worlds := countDirs(roots.Worlds)
 	usersRoot := strings.TrimSpace(roots.UsersRoot)
 	if usersRoot != "" {

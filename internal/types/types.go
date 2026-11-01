@@ -84,9 +84,12 @@ type ContentRoots struct {
 	SkinPacks     string `json:"skinPacks,omitempty"`
 	Screenshots   string `json:"screenshots,omitempty"`
 	UsersRoot     string `json:"usersRoot"`
-	ResourcePacks string `json:"resourcePacks"`
-	BehaviorPacks string `json:"behaviorPacks"`
-	IsIsolation   bool   `json:"isIsolation"`
+	ResourcePacks            string `json:"resourcePacks"`
+	BehaviorPacks            string `json:"behaviorPacks"`
+	DevelopmentResourcePacks string `json:"developmentResourcePacks,omitempty"`
+	DevelopmentBehaviorPacks string `json:"developmentBehaviorPacks,omitempty"`
+	DevelopmentSkinPacks     string `json:"developmentSkinPacks,omitempty"`
+	IsIsolation              bool   `json:"isIsolation"`
 	IsPreview     bool   `json:"isPreview"`
 }
 
@@ -238,6 +241,7 @@ type PackInfo struct {
 	MinEngineVersion string `json:"minEngineVersion"`
 	IconDataUrl      string `json:"iconDataUrl"`
 	Path             string `json:"path"`
+	IsDevelopment    bool   `json:"isDevelopment,omitempty"`
 }
 
 type LevelDatField struct {
